@@ -68,8 +68,9 @@ class OrdersAnalytics:
 
     def find_most_common_ship_method(self):
         "Find the most common shipping method for each Category"
-        
-        return 
+
+        mode = self.orders_df['Ship Mode'].mode()
+        return mode[0]
 
     def find_number_of_order_per_category(self):
         "find the number of orders for each Category and Sub Category"
