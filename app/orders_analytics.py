@@ -1,9 +1,9 @@
 import logging
 import os
+from typing import Tuple
 
 import pandas as pd
-from pandas import Series
-from pandas.arrays import StringArray
+from pandas import DataFrame, Series
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,7 +18,7 @@ class OrdersAnalytics:
         self.csv_path = csv_path
         self.orders_df = pd.read_csv(self.csv_path)
 
-    def calculate_profit_by_order(self, order: Series):
+    def calculate_profit_by_order(self, order: Series) -> int:
         "Calculate profit for an order in the DataFrame"
         
         self.logger.info(f"Calculating profit for order id: {order['Order Id']}")
@@ -42,7 +42,7 @@ class OrdersAnalytics:
 
         return profit
 
-    def calculate_most_profitable_region(self):
+    def calculate_most_profitable_region(self) -> DataFrame:
         "Calculate the most profitable region and its profit"
 
         self.logger.info("Calculating most profitable region")
@@ -57,7 +57,7 @@ class OrdersAnalytics:
 
         return most_profitable_region
 
-    def find_most_common_ship_method_per_category(self):
+    def find_most_common_ship_method_per_category(self) -> DataFrame:
         "Find the most common shipping method for each Category"
 
         self.logger.info("Finding most common shipping method for each category")
@@ -75,7 +75,7 @@ class OrdersAnalytics:
 
         return most_common_shipping
 
-    def find_number_of_orders_per_category(self):
+    def find_number_of_orders_per_category(self) -> DataFrame:
         "Find the number of orders for each Category and Sub Category"
 
         self.logger.info("Finding number of orders by category and subcategory")
@@ -89,7 +89,7 @@ class OrdersAnalytics:
 
         return orders_per_category
 
-    def get_reporting_period(self):
+    def get_reporting_period(self) -> Tuple[str, str]:
         "Get the reporting period from earliest order date to latest order date"
         start_str = self.orders_df["Order Date"].min()
         end_str = self.orders_df["Order Date"].max()
