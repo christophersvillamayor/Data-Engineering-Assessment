@@ -22,7 +22,7 @@ class OrdersAnalytics:
     def calculate_profit_by_order(self, order: Series) -> int:
         "Calculate profit for an order in the DataFrame"
         
-        self.logger.info(f"Calculating profit for order id: {order['Order Id']}")
+        self.logger.debug(f"Calculating profit for order id: {order['Order Id']}")
 
         # FIXME: handle missing values accordingly
         list_price = order['List Price']
@@ -49,12 +49,11 @@ class OrdersAnalytics:
         self.logger.info("Calculating most profitable region")
 
         self.orders_df['Profit'] = self.orders_df.apply(self.calculate_profit_by_order, axis=1)
-        most_profitable_region = (
-            self.orders_df.groupby('Region', as_index=False)['Profit']
-                .sum()
-                .sort_values('Profit', ascending=False)
-                .head(1)
-        )
+        profits_per_region = self.orders_df.groupby('Region', as_index=False)['Profit'].sum()
+
+        self.logger.debug(f"Profits per region: \n{profits_per_region}")
+
+        most_profitable_region = profits_per_region.sort_values('Profit', ascending=False).head(1)
 
         return most_profitable_region
 
@@ -68,6 +67,9 @@ class OrdersAnalytics:
             .size()
             .reset_index(name='Order Count')
         )
+
+        self.logger.debug(f"Shipping method by category: \n{shipping_counts}")
+
         most_common_shipping = (
             shipping_counts.loc[
                 shipping_counts.groupby('Category')['Order Count'].idxmax()
@@ -88,16 +90,23 @@ class OrdersAnalytics:
                 .sort_values(['Category', 'Order Count'], ascending=[True, False])
         )
 
+        self.logger.debug(f"Number of orders per category/subcategory: \n{orders_per_category}")
+
         return orders_per_category
 
     def get_reporting_period(self) -> Tuple[str, str]:
         "Get the reporting period from earliest order date to latest order date"
+
         start_str = self.orders_df["Order Date"].min()
         end_str = self.orders_df["Order Date"].max()
 
         return start_str, end_str
 
     def generate_output_csvs(self) -> Path:
+        "Generate the output csvs"
+
+        self.logger.info("Generating output csvs")
+
         start_str, end_str = self.get_reporting_period()
         reporting_period_label = f"{start_str}_to_{end_str}"
 
