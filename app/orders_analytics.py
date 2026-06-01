@@ -74,7 +74,10 @@ class OrdersAnalytics:
         mode: Series = self.orders_df['Ship Mode'].mode()
         return mode[0]
 
-    def find_number_of_order_per_category(self):
-        "find the number of orders for each Category and Sub Category"
+    def find_number_of_orders_per_category(self):
+        "Find the number of orders for each Category and Sub Category"
 
-        return
+        categories: StringArray = self.orders_df['Category'].unique()
+        subcategories: StringArray = self.orders_df['Sub Category'].unique()
+
+        return categories, subcategories
