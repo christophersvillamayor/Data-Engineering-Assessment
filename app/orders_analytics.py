@@ -1,6 +1,7 @@
 import logging
 import os
 from typing import Tuple
+from pathlib import Path
 
 import pandas as pd
 from pandas import DataFrame, Series
@@ -96,11 +97,15 @@ class OrdersAnalytics:
 
         return start_str, end_str
 
-    def generate_output_csvs(self):
+    def generate_output_csvs(self) -> Path:
         start_str, end_str = self.get_reporting_period()
         reporting_period_label = f"{start_str}_to_{end_str}"
 
-        most_profitable_region_csv = self.calculate_most_profitable_region().to_csv(f"most_profitable_region_{reporting_period_label}.csv")
-        most_common_shipping_csv  = self.find_most_common_ship_method_per_category().to_csv(f"shipping_method_by_category_{reporting_period_label}.csv")
-        orders_per_category_csv  = self.find_number_of_orders_per_category().to_csv(f"orders_by_category_subcategory_{reporting_period_label}.csv")
+        output_folder = Path('output/')
+        output_folder.mkdir(exist_ok=True)
 
+        self.calculate_most_profitable_region().to_csv(f"{output_folder}/most_profitable_region_{reporting_period_label}.csv")
+        self.find_most_common_ship_method_per_category().to_csv(f"{output_folder}/shipping_method_by_category_{reporting_period_label}.csv")
+        self.find_number_of_orders_per_category().to_csv(f"{output_folder}/orders_by_category_subcategory_{reporting_period_label}.csv")
+
+        return output_folder
