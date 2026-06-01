@@ -2,6 +2,8 @@ import logging
 import os
 
 import pandas as pd
+from pandas import Series
+from pandas.arrays import StringArray
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,7 +18,7 @@ class OrdersAnalytics:
         self.csv_path = csv_path
         self.orders_df = pd.read_csv(self.csv_path)
 
-    def calculate_profit_by_order(self, order: pd.Series):
+    def calculate_profit_by_order(self, order: Series):
         "Calculate profit for an order in the DataFrame"
         
         self.logger.info(f"Calculating profit for order id: {order['Order Id']}")
@@ -45,9 +47,9 @@ class OrdersAnalytics:
 
         self.logger.info(f"Calculating most profitable region")
 
-        regions: pd.arrays.StringArray = self.orders_df['Region'].unique()
+        regions: StringArray = self.orders_df['Region'].unique()
         max_profit = 0
-        most_profitable_region = None
+        most_profitable_region = ''
         for region in regions:
             self.logger.info(f"Calculating profit for region: {region}")
             
@@ -69,7 +71,7 @@ class OrdersAnalytics:
     def find_most_common_ship_method(self):
         "Find the most common shipping method for each Category"
 
-        mode = self.orders_df['Ship Mode'].mode()
+        mode: Series = self.orders_df['Ship Mode'].mode()
         return mode[0]
 
     def find_number_of_order_per_category(self):
