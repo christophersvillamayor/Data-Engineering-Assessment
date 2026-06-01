@@ -72,7 +72,7 @@ class OrdersAnalytics:
 
         most_common_shipping = (
             shipping_counts.loc[
-                shipping_counts.groupby('Category')['Order Count'].idxmax()
+                shipping_counts.groupby('Category')['Order Count'].idxmax() # FIXME: There might be a tie sometimes
             ]
         )
 
