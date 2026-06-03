@@ -5,8 +5,6 @@ import logging
 from typing import Tuple
 from urllib.parse import unquote_plus
 
-import pandas as pd
-
 from orders_analytics import OrdersAnalytics
 
 s3_client = boto3.client('s3')
@@ -30,6 +28,7 @@ def get_s3_info_from_event(event: dict) -> Tuple[str, str]:
     """
     Extract bucket and key from S3 event
     """
+
     record = event["Records"][0]
 
     bucket = record["s3"]["bucket"]["name"]
@@ -38,12 +37,13 @@ def get_s3_info_from_event(event: dict) -> Tuple[str, str]:
     return bucket, key
 
 
-def load_csv_from_s3(bucket: str, key: str) -> pd.DataFrame:
+def load_csv_from_s3(bucket: str, key: str) -> OrdersAnalytics:
     """
-    Load CSV from S3 into a pandas DataFrame
+    Load CSV from S3 into OrderAnalytics class
     """
+
     response = s3_client.get_object(Bucket=bucket, Key=key)
-    return pd.read_csv(response["Body"])
+    return OrdersAnalytics(response['Body'])
 
 def lambda_handler(event, context):
     "Lambda function to process S3 events and perform analytics on orders data"
@@ -51,12 +51,15 @@ def lambda_handler(event, context):
     logger.info(f"Received event: {json.dumps(event, indent=2)}")
 
     bucket, key = get_s3_info_from_event(event)
-    csv_path = f"s3://{bucket}/{key}"
 
     logger.info(f"Processing file: s3://{bucket}/{key}")
-    oa = OrdersAnalytics(csv_path)
+    oa = load_csv_from_s3(bucket, key)
     oa.generate_output_csvs()
 
+    # FIXME: remove test output
     return {
-        "statusCode": 200
+        "statusCode": 200,
+        "body": {
+            "test": "test"
+        }
     }
