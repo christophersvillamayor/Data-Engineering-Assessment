@@ -40,6 +40,24 @@ resource "aws_lambda_permission" "allow_bucket" {
   source_arn    = "arn:aws:s3:::${aws_s3_bucket.input_s3.bucket}"
 }
 
+resource "aws_iam_role_policy" "lambda_s3" {
+  name = "lambda-s3-read-permissions"
+  
+  role = module.lambda_function.lambda_role_name
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["s3:GetObject"]
+        Resource = ["arn:aws:s3:::${aws_s3_bucket.input_s3.bucket}/*"]
+      }
+    ]
+  })
+}
+
+
 resource "aws_s3_bucket_notification" "s3_notification" {
   bucket = aws_s3_bucket.input_s3.id
   lambda_function {
