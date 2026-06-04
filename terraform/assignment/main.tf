@@ -20,7 +20,7 @@ module "lambda_function" {
   timeout                 = 15
   memory_size             = 256
   environment_variables   = {
-    EXAMPLE_VAR = "value"
+    LOG_LEVEL = "DEBUG"
   }
 
   default_tags = local.default_tags
@@ -37,7 +37,7 @@ resource "aws_lambda_permission" "allow_bucket" {
   action        = "lambda:InvokeFunction"
   function_name = module.lambda_function.lambda_arn
   principal     = "s3.amazonaws.com"
-  source_arn    = aws_s3_bucket.input_s3.id
+  source_arn    = "arn:aws:s3:::${aws_s3_bucket.input_s3.bucket}"
 }
 
 resource "aws_s3_bucket_notification" "s3_notification" {
