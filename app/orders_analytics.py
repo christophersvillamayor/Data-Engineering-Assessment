@@ -3,6 +3,7 @@ import os
 from typing import Tuple
 from pathlib import Path
 
+import boto3
 import pandas as pd
 from pandas import DataFrame, Series
 
@@ -107,14 +108,41 @@ class OrdersAnalytics:
 
         self.logger.info("Generating output csvs")
 
+        s3_client = boto3.client('s3')
+
         start_str, end_str = self.get_reporting_period()
         reporting_period_label = f"{start_str}_to_{end_str}"
-
-        output_folder = Path('output/')
+        output_folder = Path('/tmp/output/')
         output_folder.mkdir(exist_ok=True)
 
-        self.calculate_most_profitable_region().to_csv(f"{output_folder}/most_profitable_region_{reporting_period_label}.csv")
-        self.find_most_common_ship_method_per_category().to_csv(f"{output_folder}/shipping_method_by_category_{reporting_period_label}.csv")
-        self.find_number_of_orders_per_category().to_csv(f"{output_folder}/orders_by_category_subcategory_{reporting_period_label}.csv")
+        self.logger.info("Gathering required csvs")
 
-        return output_folder
+        files = [
+            self.calculate_most_profitable_region(),
+            self.find_most_common_ship_method_per_category(),
+            self.find_number_of_orders_per_category()
+        ]
+
+        filenames = [
+            f"most_profitable_region_{reporting_period_label}.csv",
+            f"shipping_method_by_category_{reporting_period_label}.csv",
+            f"orders_by_category_subcategory_{reporting_period_label}.csv"
+        ]
+
+        output_bucket = os.environ['OUTPUT_BUCKET']
+
+        for df, filename in zip(files, filenames):
+            local_path = output_folder / filename
+            df.to_csv(local_path, index=False)
+
+            self.logger.info(
+                f"Uploading {filename} to s3://{output_bucket}/results/"
+            )
+
+            s3_client.upload_file(
+                str(local_path),
+                output_bucket,
+                f"results/{filename}"
+            )
+
+        return filenames
