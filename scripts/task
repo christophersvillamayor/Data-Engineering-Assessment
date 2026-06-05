@@ -72,12 +72,38 @@ update_lambda() {
 
 TARGETS[deploy]="Build, push, and deploy Lambda"
 deploy() {
+    if [ -n "$CI" ]; then
+        echo "Running in CI, skipping profile setup"
+    else
+        setup "${AWS_PROFILE:-default}"
+    fi
+
     local commit=$(git rev-parse HEAD)
     local image_uri="$AWS_URL/$IMAGE_NAME:$commit"
 
     build_image "$IMAGE_NAME" "."
     push_image "$IMAGE_NAME"
     update_lambda "$image_uri"
+}
+
+TARGETS[setup]="Setup local environment"
+setup() {
+    local profile="${1:-default}"
+
+    echo "Checking AWS profile: $profile"
+
+    if aws configure list-profiles | grep -qx "$profile"; then
+        echo "AWS profile '$profile' already exists"
+    else
+        echo "AWS profile '$profile' does not exist"
+        echo "Creating profile..."
+
+        aws configure --profile "$profile"
+    fi
+
+    export AWS_PROFILE="$profile"
+    echo "Using AWS_PROFILE=$AWS_PROFILE"
+    aws sts get-caller-identity
 }
 
 TARGETS[help]="Displays usage help for this script"
