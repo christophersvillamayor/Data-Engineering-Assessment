@@ -54,12 +54,20 @@ def lambda_handler(event, context):
 
     logger.info(f"Processing file: s3://{bucket}/{key}")
     oa = load_csv_from_s3(bucket, key)
-    oa.generate_output_csvs()
+    filenames = oa.generate_output_csvs()
 
-    # FIXME: remove test output
     return {
         "statusCode": 200,
         "body": {
-            "test": "test"
+            "message": "Successfully processed order file",
+            "input": {
+                "bucket": bucket,
+                "key": key
+            },
+            "output": {
+                "bucket": os.environ["OUTPUT_BUCKET"],
+                "prefix": "results/",
+                "filenames": filenames
+            }
         }
     }
