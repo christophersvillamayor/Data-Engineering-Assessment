@@ -11,6 +11,17 @@ resource "aws_s3_bucket" "input_s3" {
   force_destroy = true
 }
 
+resource "aws_s3_bucket" "output_s3" {
+  bucket = "${local.app_name}-output-bucket"
+
+  tags = merge({
+      Name        = "${local.app_name}-output-bucket"
+      Environment = "${var.env}"
+    }, local.default_tags
+  )
+  force_destroy = true
+}
+
 module "lambda_function" {
   source                  = "../modules/lambda"
   lambda_name             = "${local.app_name}-file-processor"
@@ -21,6 +32,7 @@ module "lambda_function" {
   memory_size             = 256
   environment_variables   = {
     LOG_LEVEL = "DEBUG"
+    OUTPUT_BUCKET = aws_s3_bucket.output_s3.bucket
   }
 
   default_tags = local.default_tags
@@ -52,6 +64,11 @@ resource "aws_iam_role_policy" "lambda_s3" {
         Effect   = "Allow"
         Action   = ["s3:GetObject"]
         Resource = ["arn:aws:s3:::${aws_s3_bucket.input_s3.bucket}/*"]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = ["arn:aws:s3:::${aws_s3_bucket.output_s3.bucket}/*"]
       }
     ]
   })
