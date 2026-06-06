@@ -4,14 +4,24 @@ set -e
 
 declare -A TARGETS
 
-AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-AWS_REGION=$(aws configure get region)
-AWS_URL="$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com"
-
 TERRAFORM_DIR="./terraform/assignment"
 
-IMAGE_NAME=$(terraform -chdir=$TERRAFORM_DIR output -raw ecr_repository_name)
-LAMBDA_NAME=$(terraform -chdir=$TERRAFORM_DIR output -raw lambda_function_name)
+get_aws_account_id() {
+    aws sts get-caller-identity --query Account --output text
+}
+
+get_aws_region() {
+    aws configure get region
+}
+
+get_ecr_url() {
+    echo "$(get_aws_account_id).dkr.ecr.$(get_aws_region).amazonaws.com"
+}
+
+load_terraform_outputs() {
+    IMAGE_NAME=$(terraform -chdir=$TERRAFORM_DIR output -raw ecr_repository_name)
+    LAMBDA_NAME=$(terraform -chdir=$TERRAFORM_DIR output -raw lambda_function_name)
+}
 
 TARGETS[build_image]="Builds docker image"
 build_image() {
@@ -24,10 +34,13 @@ build_image() {
         return 1
     fi
 
-    IMAGE_URI="$AWS_URL/$image_name:$commit"
-    LATEST_URI="$AWS_URL/$image_name:latest"
+    local aws_url="$(get_ecr_url)"
+
+    IMAGE_URI="$aws_url/$image_name:$commit"
+    LATEST_URI="$aws_url/$image_name:latest"
 
     echo "Building $IMAGE_URI"
+
     docker build \
         --platform linux/arm64 \
         --provenance=false \
@@ -42,12 +55,14 @@ push_image() {
     local image_name=$1
     local commit=$(git rev-parse HEAD)
 
-    IMAGE_URI="$AWS_URL/$image_name:$commit"
-    LATEST_URI="$AWS_URL/$image_name:latest"
+    local aws_url="$(get_ecr_url)"
+
+    IMAGE_URI="$aws_url/$image_name:$commit"
+    LATEST_URI="$aws_url/$image_name:latest"
 
     echo "Logging into ECR..."
-    aws ecr get-login-password --region "$AWS_REGION" \
-        | docker login --username AWS --password-stdin "$AWS_URL"
+    aws ecr get-login-password --region "$(get_aws_region)" \
+        | docker login --username AWS --password-stdin "$aws_url"
 
     echo "Pushing $IMAGE_URI"
     docker push "$IMAGE_URI"
@@ -60,7 +75,7 @@ TARGETS[update_lambda]="Updates Lambda function image"
 update_lambda() {
     local image_uri=$1
 
-    echo "Updating Lambda $LAMBDA_NAME to $image_uri"
+    echo "Updating Lambda $LAMBDA_NAME with $image_uri"
 
     aws lambda update-function-code \
         --function-name "$LAMBDA_NAME" \
@@ -78,8 +93,11 @@ deploy() {
         setup "${AWS_PROFILE:-default}"
     fi
 
+    load_terraform_outputs
+    aws_url="$(get_ecr_url)"
+
     local commit=$(git rev-parse HEAD)
-    local image_uri="$AWS_URL/$IMAGE_NAME:$commit"
+    local image_uri="$aws_url/$IMAGE_NAME:$commit"
 
     build_image "$IMAGE_NAME" "."
     push_image "$IMAGE_NAME"
