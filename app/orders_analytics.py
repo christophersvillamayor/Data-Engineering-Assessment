@@ -22,10 +22,16 @@ class OrdersAnalytics:
 
     def calculate_profit_by_order(self, order: Series) -> int:
         "Calculate profit for an order in the DataFrame"
-        
-        self.logger.debug(f"Calculating profit for order id: {order['Order Id']}")
 
-        # FIXME: handle missing values accordingly
+        order_id = order.get('Order Id', 'Unknown')
+        self.logger.debug(f"Calculating profit for order id: {order_id}")
+
+        required_fields = ['List Price', 'Discount Percent', 'cost price', 'Quantity']
+
+        if any(field not in order or pd.isna(order[field]) for field in required_fields):
+            self.logger.warning(f"Skipping order {order_id}: Missing critical financial columns.")
+            return 0
+
         list_price = order['List Price']
         discount_percent = order['Discount Percent'] / 100
         cost_price = order['cost price']
