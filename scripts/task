@@ -22,10 +22,15 @@ get_ecr_url() {
     echo "$(get_aws_account_id).dkr.ecr.$(get_aws_region).amazonaws.com"
 }
 
+safe_tf_output() {
+    terraform -chdir="$TERRAFORM_DIR" output -raw "$1" 2>/dev/null || echo ""
+}
+
 load_terraform_outputs() {
-    IMAGE_NAME=$(terraform -chdir=$TERRAFORM_DIR output -raw ecr_repository_name)
-    LAMBDA_NAME=$(terraform -chdir=$TERRAFORM_DIR output -raw lambda_function_name)
-    INPUT_BUCKET_NAME=$(terraform -chdir=$TERRAFORM_DIR output -raw input_s3_name)
+    IMAGE_NAME=$(safe_tf_output ecr_repository_name)
+    LAMBDA_NAME=$(safe_tf_output lambda_function_name)
+    INPUT_BUCKET_NAME=$(safe_tf_output input_s3_name)
+    OUTPUT_BUCKET_NAME=$(safe_tf_output output_s3_name)
 }
 
 # -------------------------
