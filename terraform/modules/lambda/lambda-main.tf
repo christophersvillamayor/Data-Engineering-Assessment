@@ -39,6 +39,8 @@ resource "aws_lambda_function" "lambda_function" {
   image_config {
     command = ["lambda.lambda_handler" ]
   }
+
+  architectures = ["arm64"]
   
   timeout       = var.timeout
   memory_size   = var.memory_size

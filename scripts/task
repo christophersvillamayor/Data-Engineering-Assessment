@@ -1,0 +1,252 @@
+#!/usr/bin/env bash
+
+set -e
+
+declare -A TARGETS
+
+# -------------------------
+# Helpers
+# -------------------------
+
+LATEST_COMMIT=$(git rev-parse HEAD)
+
+get_aws_account_id() {
+    aws sts get-caller-identity --query Account --output text
+}
+
+get_aws_region() {
+    aws configure get region
+}
+
+get_ecr_url() {
+    echo "$(get_aws_account_id).dkr.ecr.$(get_aws_region).amazonaws.com"
+}
+
+safe_tf_output() {
+    terraform -chdir="$TERRAFORM_DIR" output -raw "$1" 2>/dev/null || echo ""
+}
+
+load_terraform_outputs() {
+    IMAGE_NAME=$(safe_tf_output ecr_repository_name)
+    LAMBDA_NAME=$(safe_tf_output lambda_function_name)
+    INPUT_BUCKET_NAME=$(safe_tf_output input_s3_name)
+    OUTPUT_BUCKET_NAME=$(safe_tf_output output_s3_name)
+}
+
+# -------------------------
+# Terraform
+# -------------------------
+
+TERRAFORM_DIR="./terraform/assignment"
+VAR_FILE="vars.tfvars"
+
+TARGETS[tf_init]="Initialize Terraform"
+tf_init() {
+    terraform -chdir="$TERRAFORM_DIR" init
+}
+
+TARGETS[tf_plan]="Run Terraform plan"
+tf_plan() {
+    terraform \
+        -chdir="$TERRAFORM_DIR" \
+        plan \
+        -var-file=$VAR_FILE
+}
+
+TARGETS[tf_apply]="Apply Terraform infrastructure"
+tf_apply() {
+    local tag="${1:-$LATEST_COMMIT}"
+    terraform \
+        -chdir="$TERRAFORM_DIR" \
+        apply \
+        -var-file=$VAR_FILE \
+        -auto-approve \
+        -var="image_tag=$tag"
+}
+
+TARGETS[tf_apply_ecr]="Apply only ECR infrastructure"
+tf_apply_ecr() {
+    terraform \
+        -chdir="$TERRAFORM_DIR" \
+        apply \
+        -var-file="$VAR_FILE" \
+        -auto-approve \
+        -target=module.ecr_repo
+}
+
+TARGETS[tf_destroy]="Destroy Terraform resources"
+tf_destroy() {
+    terraform -chdir="$TERRAFORM_DIR" destroy -var-file=$VAR_FILE -auto-approve
+}
+
+# -------------------------
+# Docker / ECR
+# -------------------------
+
+TARGETS[build_image]="Builds docker image"
+build_image() {
+    local image_name=$1
+    local tag="${2:-$LATEST_COMMIT}"
+    local build_dir="${3:-.}"
+
+    if [ -z "$image_name" ]; then
+        echo "ERROR: Missing required parameter image_name" >&2
+        return 1
+    fi
+
+    local aws_url="$(get_ecr_url)"
+
+    IMAGE_URI="$aws_url/$image_name:$tag"
+
+    echo "Building $IMAGE_URI"
+
+    docker build \
+        --platform linux/arm64 \
+        --provenance=false \
+        --no-cache \
+        -t "$IMAGE_URI" \
+        "$build_dir"
+}
+
+TARGETS[push_image]="Pushes docker image to ECR"
+push_image() {
+    local image_name=$1
+    local tag="${2:-$LATEST_COMMIT}"
+
+    local aws_url="$(get_ecr_url)"
+
+    IMAGE_URI="$aws_url/$image_name:$tag"
+
+    aws ecr get-login-password --region "$(get_aws_region)" \
+        | docker login --username AWS --password-stdin "$aws_url"
+
+    docker push "$IMAGE_URI"
+}
+
+# -------------------------
+# Main Commands
+# -------------------------
+
+TARGETS[setup]="Setup local environment"
+setup() {
+    local profile="${AWS_PROFILE:-${1:-default}}"
+
+    echo "Checking AWS profile: $profile"
+
+    if aws configure list-profiles | grep -qx "$profile"; then
+        echo "AWS profile '$profile' already exists"
+    else
+        echo "AWS profile '$profile' does not exist"
+        echo "Creating profile..."
+
+        aws configure --profile "$profile"
+    fi
+
+    export AWS_PROFILE="$profile"
+    echo "Using AWS_PROFILE=$AWS_PROFILE"
+    aws sts get-caller-identity
+}
+
+TARGETS[deploy]="Build, push, and deploy Lambda"
+deploy() {
+    if [ -n "$CI" ]; then
+        echo "Running in CI, skipping profile setup"
+    else
+        setup "${AWS_PROFILE:-default}"
+    fi
+
+    load_terraform_outputs
+
+    build_image "$IMAGE_NAME" "$LATEST_COMMIT"
+    push_image "$IMAGE_NAME"
+    tf_apply "$LATEST_COMMIT"
+}
+
+TARGETS[bootstrap]="Initialize Terraform and Deploy Lambda. Used for first time setup"
+bootstrap() {
+    if [ -z "$CI" ]; then
+        setup "${AWS_PROFILE:-default}"
+    fi
+
+    tf_init
+
+    # Create ECR first
+    tf_apply_ecr
+
+    load_terraform_outputs
+
+    # Create placeholder image
+    build_image "$IMAGE_NAME" bootstrap
+    push_image "$IMAGE_NAME" bootstrap
+
+    # Create lambda
+    tf_apply bootstrap
+}
+
+TARGETS[help]="Displays usage help for this script"
+help() {
+    echo "Usage: ./task <target>"
+    echo "Available targets:"
+    echo
+    for target in "${!TARGETS[@]}"; do
+        printf "  \033[33m%-12s\033[0m %s\n" "$target" "${TARGETS[$target]}"
+    done
+}
+
+# -------------------------
+# Testing
+# -------------------------
+
+TARGETS[test]="Test Lambda by copying input CSVs to S3"
+test() {
+    if [ -z "$CI" ]; then
+        setup "${AWS_PROFILE:-default}"
+    fi
+
+    load_terraform_outputs
+
+    echo "Uploading CSV to S3"
+    aws s3 cp ./assessment_assets/sample_orders.csv \
+        "s3://$INPUT_BUCKET_NAME/"
+
+    echo "Waiting for Lambda logs"
+    MSYS_NO_PATHCONV=1 aws logs tail "/aws/lambda/$LAMBDA_NAME" --follow
+}
+
+TARGETS[local_test]="Test order_analytics.py locally"
+local_test() {
+    local venv=".venv"
+
+    if [ ! -d "$venv" ]; then
+        python -m venv "$venv"
+    fi
+
+    if [ -f "$venv/Scripts/activate" ]; then
+        source "$venv/Scripts/activate"
+    else
+        source "$venv/bin/activate"
+    fi
+
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements.txt
+
+    export LOG_LEVEL="DEBUG"
+    python -c "from app.orders_analytics import OrdersAnalytics; oa = OrdersAnalytics('assessment_assets/sample_orders.csv'); oa.generate_output_csvs()"
+    unset LOG_LEVEL
+}
+
+
+# -------------------------
+# Main
+# -------------------------
+
+TARGET="$1"
+
+if [[ -n "$TARGET" && -n "${TARGETS[$TARGET]}" ]]; then
+    shift
+    "$TARGET" "$@"
+else
+    help
+    exit 1
+fi
+

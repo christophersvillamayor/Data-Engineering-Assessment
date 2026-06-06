@@ -98,7 +98,7 @@ terraform apply -var-file="vars.tfvars"
 
 Example code to Build and push an image to the ecr repo
 ```sh
-docker build --platform linux/arm64 --no-cache -t "$LOCAL_IMAGE_NAME" ./app
+docker build --platform linux/arm64 --no-cache -t "$LOCAL_IMAGE_NAME" .
 aws ecr get-login-password | docker login --username AWS --password-stdin "$AWS_ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com"
 docker tag "$LOCAL_IMAGE_NAME" "$ECR_URI"
 docker push "$ECR_URI"
