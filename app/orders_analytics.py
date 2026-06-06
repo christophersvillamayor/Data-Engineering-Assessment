@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 from typing import Tuple
 from pathlib import Path
 
@@ -106,16 +107,16 @@ class OrdersAnalytics:
 
         return start_str, end_str
 
-    def generate_output_csvs(self) -> Path:
+    def generate_output_csvs(self, upload_to_s3: bool = False) -> Path:
         "Generate the output csvs"
 
         self.logger.info("Generating output csvs")
 
-        s3_client = boto3.client('s3')
-
         start_str, end_str = self.get_reporting_period()
         reporting_period_label = f"{start_str}_to_{end_str}"
-        output_folder = Path('/tmp/output/')
+
+        temp_dir = tempfile.gettempdir()
+        output_folder = Path(f"{temp_dir}/output/")
         output_folder.mkdir(exist_ok=True)
 
         self.logger.info("Gathering required csvs")
@@ -132,20 +133,24 @@ class OrdersAnalytics:
             f"orders_by_category_subcategory_{reporting_period_label}.csv"
         ]
 
-        output_bucket = os.environ['OUTPUT_BUCKET']
-
+        self.logger.info(f"Generating CSVs at {output_folder}")
         for df, filename in zip(files, filenames):
             local_path = output_folder / filename
+            
             df.to_csv(local_path, index=False)
 
-            self.logger.info(
-                f"Uploading {filename} to s3://{output_bucket}/results/"
-            )
+            if upload_to_s3:
+                output_bucket = os.environ['OUTPUT_BUCKET']
+            
+                self.logger.info(
+                    f"Uploading {filename} to s3://{output_bucket}/results/"
+                )
 
-            s3_client.upload_file(
-                str(local_path),
-                output_bucket,
-                f"results/{filename}"
-            )
+                s3_client = boto3.client('s3')
+                s3_client.upload_file(
+                    str(local_path),
+                    output_bucket,
+                    f"results/{filename}"
+                )
 
         return filenames
