@@ -13,3 +13,7 @@ output "ecr_repository_url" {
 output "input_s3_name" {
     value = aws_s3_bucket.input_s3.bucket
 }
+
+output "ouput_s3_name" {
+    value = aws_s3_bucket.output_s3.bucket
+}
