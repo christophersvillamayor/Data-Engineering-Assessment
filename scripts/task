@@ -23,6 +23,7 @@ get_ecr_url() {
 load_terraform_outputs() {
     IMAGE_NAME=$(terraform -chdir=$TERRAFORM_DIR output -raw ecr_repository_name)
     LAMBDA_NAME=$(terraform -chdir=$TERRAFORM_DIR output -raw lambda_function_name)
+    INPUT_BUCKET_NAME=$(terraform -chdir=$TERRAFORM_DIR output -raw input_s3_name)
 }
 
 # -------------------------
@@ -188,6 +189,27 @@ help() {
         printf "  \033[33m%-12s\033[0m %s\n" "$target" "${TARGETS[$target]}"
     done
 }
+
+# -------------------------
+# Testing
+# -------------------------
+
+TARGETS[test]="Test Lambda by copying input CSVs to S3"
+test() {
+    if [ -z "$CI" ]; then
+        setup "${AWS_PROFILE:-default}"
+    fi
+
+    load_terraform_outputs
+
+    echo "Uploading CSV to S3"
+    aws s3 cp ./assessment_assets/sample_orders.csv \
+        "s3://$INPUT_BUCKET_NAME/"
+
+    echo "Waiting for Lambda logs"
+    MSYS_NO_PATHCONV=1 aws logs tail "/aws/lambda/$LAMBDA_NAME" --follow
+}
+
 
 # -------------------------
 # Main
