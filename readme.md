@@ -97,6 +97,11 @@ This will:
 1. Upload ./assessment_assets/sample_orders.csv to the Input S3
 2. Tail the CloudWatch logs for the Lambda function
 
+If you would like to test `app/orders_analytics.py` locally, run:
+```
+./scripts/task local_test
+```
+
 ## Troubleshooting
 
 Check the current AWS profile:
