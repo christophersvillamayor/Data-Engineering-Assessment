@@ -74,6 +74,26 @@ resource "aws_iam_role_policy" "lambda_s3" {
   })
 }
 
+resource "aws_iam_user_policy" "cloudwatch_logs_read" {
+  name = "CloudWatchLogsRead"
+  user = var.aws_profile
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:FilterLogEvents",
+          "logs:GetLogEvents",
+          "logs:DescribeLogStreams",
+          "logs:DescribeLogGroups"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
 
 resource "aws_s3_bucket_notification" "s3_notification" {
   bucket = aws_s3_bucket.input_s3.id
