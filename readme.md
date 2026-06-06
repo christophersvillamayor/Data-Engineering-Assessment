@@ -88,19 +88,14 @@ Destroy all Terraform-managed resources:
 
 ## Testing
 
-After deployment, you can test the Lambda through the following commands.
-
-In one terminal run:
-```bash
-./scripts/task tail_logs
-```
-In order to view the logs
-
-In another terminal run:
+After deployment, you can test the Lambda through the following command:
 ```bash
 ./scripts/task test
 ```
-To actually upload to the input S3 and trigger the Lambda
+
+This will:
+1. Upload ./assessment_assets/sample_orders.csv to the Input S3
+2. Tail the CloudWatch logs for the Lambda function
 
 ## Troubleshooting
 
