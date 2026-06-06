@@ -8,6 +8,8 @@ declare -A TARGETS
 # Helpers
 # -------------------------
 
+LATEST_COMMIT=$(git rev-parse HEAD)
+
 get_aws_account_id() {
     aws sts get-caller-identity --query Account --output text
 }
@@ -48,7 +50,7 @@ tf_plan() {
 
 TARGETS[tf_apply]="Apply Terraform infrastructure"
 tf_apply() {
-    local tag="${1:-latest}"
+    local tag="${1:-$LATEST_COMMIT}"
     terraform \
         -chdir="$TERRAFORM_DIR" \
         apply \
@@ -79,7 +81,7 @@ tf_destroy() {
 TARGETS[build_image]="Builds docker image"
 build_image() {
     local image_name=$1
-    local tag="${2:-$(git rev-parse HEAD)}"
+    local tag="${2:-$LATEST_COMMIT}"
     local build_dir="${3:-.}"
 
     if [ -z "$image_name" ]; then
@@ -104,7 +106,7 @@ build_image() {
 TARGETS[push_image]="Pushes docker image to ECR"
 push_image() {
     local image_name=$1
-    local tag="${2:-$(git rev-parse HEAD)}"
+    local tag="${2:-$LATEST_COMMIT}"
 
     local aws_url="$(get_ecr_url)"
 
@@ -150,13 +152,9 @@ deploy() {
 
     load_terraform_outputs
 
-    build_image "$IMAGE_NAME" "$(git rev-parse HEAD)"
+    build_image "$IMAGE_NAME" "$LATEST_COMMIT"
     push_image "$IMAGE_NAME"
-
-    local commit
-    commit=$(git rev-parse HEAD)
-
-    tf_apply "$commit"
+    tf_apply "$LATEST_COMMIT"
 }
 
 TARGETS[bootstrap]="Initialize Terraform and Deploy Lambda. Used for first time setup"
