@@ -39,12 +39,31 @@ tf_init() {
 
 TARGETS[tf_plan]="Run Terraform plan"
 tf_plan() {
-    terraform -chdir="$TERRAFORM_DIR" plan -var-file=$VAR_FILE
+    terraform \
+        -chdir="$TERRAFORM_DIR" \
+        plan \
+        -var-file=$VAR_FILE
 }
 
 TARGETS[tf_apply]="Apply Terraform infrastructure"
 tf_apply() {
-    terraform -chdir="$TERRAFORM_DIR" apply -var-file=$VAR_FILE -auto-approve
+    local tag="${1:-latest}"
+    terraform \
+        -chdir="$TERRAFORM_DIR" \
+        apply \
+        -var-file=$VAR_FILE \
+        -auto-approve \
+        -var="image_tag=$tag"
+}
+
+TARGETS[tf_apply_ecr]="Apply only ECR infrastructure"
+tf_apply_ecr() {
+    terraform \
+        -chdir="$TERRAFORM_DIR" \
+        apply \
+        -var-file="$VAR_FILE" \
+        -auto-approve \
+        -target=module.ecr_repo
 }
 
 TARGETS[tf_destroy]="Destroy Terraform resources"
@@ -59,8 +78,8 @@ tf_destroy() {
 TARGETS[build_image]="Builds docker image"
 build_image() {
     local image_name=$1
-    local build_dir="${2:-.}"
-    local commit=$(git rev-parse HEAD)
+    local tag="${2:-$(git rev-parse HEAD)}"
+    local build_dir="${3:-.}"
 
     if [ -z "$image_name" ]; then
         echo "ERROR: Missing required parameter image_name" >&2
@@ -69,8 +88,7 @@ build_image() {
 
     local aws_url="$(get_ecr_url)"
 
-    IMAGE_URI="$aws_url/$image_name:$commit"
-    LATEST_URI="$aws_url/$image_name:latest"
+    IMAGE_URI="$aws_url/$image_name:$tag"
 
     echo "Building $IMAGE_URI"
 
@@ -79,47 +97,22 @@ build_image() {
         --provenance=false \
         --no-cache \
         -t "$IMAGE_URI" \
-        -t "$LATEST_URI" \
         "$build_dir"
 }
 
 TARGETS[push_image]="Pushes docker image to ECR"
 push_image() {
     local image_name=$1
-    local commit=$(git rev-parse HEAD)
+    local tag="${2:-$(git rev-parse HEAD)}"
 
     local aws_url="$(get_ecr_url)"
 
-    IMAGE_URI="$aws_url/$image_name:$commit"
-    LATEST_URI="$aws_url/$image_name:latest"
+    IMAGE_URI="$aws_url/$image_name:$tag"
 
-    echo "Logging into ECR..."
     aws ecr get-login-password --region "$(get_aws_region)" \
         | docker login --username AWS --password-stdin "$aws_url"
 
-    echo "Pushing $IMAGE_URI"
     docker push "$IMAGE_URI"
-
-    echo "Pushing $LATEST_URI"
-    docker push "$LATEST_URI"
-}
-
-# -------------------------
-# Lambda
-# -------------------------
-
-TARGETS[update_lambda]="Updates Lambda function image"
-update_lambda() {
-    local image_uri=$1
-
-    echo "Updating Lambda $LAMBDA_NAME with $image_uri"
-
-    aws lambda update-function-code \
-        --function-name "$LAMBDA_NAME" \
-        --image-uri "$image_uri"
-
-    aws lambda wait function-updated \
-        --function-name "$LAMBDA_NAME"
 }
 
 # -------------------------
@@ -155,24 +148,35 @@ deploy() {
     fi
 
     load_terraform_outputs
-    aws_url="$(get_ecr_url)"
 
-    local commit=$(git rev-parse HEAD)
-    local image_uri="$aws_url/$IMAGE_NAME:$commit"
-
-    build_image "$IMAGE_NAME" "."
+    build_image "$IMAGE_NAME" "$(git rev-parse HEAD)"
     push_image "$IMAGE_NAME"
-    update_lambda "$image_uri"
+
+    local commit
+    commit=$(git rev-parse HEAD)
+
+    tf_apply "$commit"
 }
 
-TARGETS[full_deploy]="Initialize Terraform and Deploy Lambda"
-full_deploy() {
-    setup "${AWS_PROFILE:-default}"
+TARGETS[bootstrap]="Initialize Terraform and Deploy Lambda. Used for first time setup"
+bootstrap() {
+    if [ -z "$CI" ]; then
+        setup "${AWS_PROFILE:-default}"
+    fi
 
     tf_init
-    tf_apply
 
-    deploy
+    # Create ECR first
+    tf_apply_ecr
+
+    load_terraform_outputs
+
+    # Create placeholder image
+    build_image "$IMAGE_NAME" bootstrap
+    push_image "$IMAGE_NAME" bootstrap
+
+    # Create lambda
+    tf_apply bootstrap
 }
 
 TARGETS[help]="Displays usage help for this script"

@@ -27,7 +27,7 @@ module "lambda_function" {
   lambda_name             = "${local.app_name}-file-processor"
   role_name               = "${local.app_name}-file-processor-role"
   log_retention_in_days   = 14
-  image_uri               = "${module.ecr_repo.repository_url}:latest"
+  image_uri               = "${module.ecr_repo.repository_url}:${var.image_tag}"
   timeout                 = 15
   memory_size             = 256
   environment_variables   = {
