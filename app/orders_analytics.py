@@ -77,11 +77,8 @@ class OrdersAnalytics:
 
         self.logger.debug(f"Shipping method by category: \n{shipping_counts}")
 
-        most_common_shipping = (
-            shipping_counts.loc[
-                shipping_counts.groupby('Category')['Order Count'].idxmax() # FIXME: There might be a tie sometimes
-            ]
-        )
+        max_counts = shipping_counts.groupby('Category')['Order Count'].transform('max')
+        most_common_shipping = shipping_counts[shipping_counts['Order Count'] == max_counts]
 
         return most_common_shipping
 
